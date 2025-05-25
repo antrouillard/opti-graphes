@@ -107,7 +107,6 @@ for d in range(num_days):
         model.Add(total >= min_req)
         model.Add(total <= max_req)
 
-# Ajoutez ici d'autres contraintes selon votre besoin : pauses, séquences, repos, etc.
 
 # 4. Fonction objectif : Penaliser les demandes et autres inconvénients
 penalties = []
