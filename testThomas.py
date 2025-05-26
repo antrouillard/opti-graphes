@@ -34,7 +34,8 @@ def load_my_format(filename):
                 parts = line.split(',')
                 shift_id = parts[0]
                 length = int(parts[1])
-                no_follow = parts[2:]  # liste de shifts qui ne peuvent pas suivre
+                last = parts[2]
+                no_follow = last.split('|') # liste de shifts qui ne peuvent pas suivre
                 data['shifts'][shift_id] = {'length': length, 'no_follow': no_follow}
             elif section == 'SECTION_STAFF':
                 # Ligne exemple : A,D=14,4320,3360,5,2,2,1
@@ -44,7 +45,8 @@ def load_my_format(filename):
                 valeurs= parts[2:]
                 attr_part = parts[1]  # 'D=14'
                 # Séparer la partie après le '='
-                key_value = attr_part.split('=')
+                max_shifts = attr_part.split('|')
+                '''
                 if len(key_value) != 2:
                     print("Format inattendu dans ligne:", line)
                     continue
@@ -54,8 +56,8 @@ def load_my_format(filename):
                     print("Nombre de valeurs inattendu dans ligne:", line)
                     print("il y a", len(valeurs), "éléments :", valeurs)
                     continue
-
-                max_shifts = key_value[1]
+                '''
+                #max_shifts = key_value[1]
                 max_total_minutes = int(valeurs[0])
                 min_total_minutes = int(valeurs[1])
                 max_cseq = int(valeurs[2])
@@ -102,7 +104,7 @@ def load_my_format(filename):
     return data
 
 # initialisation après chargement de data
-data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance2.txt')
+data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance21.txt')
 print(data)
 # Nombre total de jours dans l'horizon
 h = data['horizon']
