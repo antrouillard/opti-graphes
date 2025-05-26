@@ -9,110 +9,101 @@ def load_my_format(filename):
         'shifts': {},             # ID -> { 'length': int }
         'staff': {},              # ID -> { 'max_shifts': int, 'max_total': int, 'min_total': int, 'max_cseq': int, 'min_cseq': int, 'min_rest': int, 'max_wend': int }
         'days_off': {},           # EmployeeID -> list de jours
-        'shift_on_requests': [],  # list de dicts: {'empID':, 'day':, 'shiftID':, 'weight':}
-        'shift_off_requests': [], # idem
-        'cover': []               # list de dicts: {'day':, 'shiftID':, 'requirement':, 'weight_under':, 'weight_over':}
+        'shift_on_requests': [],  # list de dicts
+        'shift_off_requests': [],
+        'cover': []
     }
 
     section = None
     with open(filename, 'r') as f:
         for line in f:
             line = line.strip()
-            # Ignorer les commentaires
+            # Ignorer les commentaires ou lignes vides
             if line.startswith('#') or not line:
                 continue
-            # Détecter le début d'une section
+
+            # Détecter la section
             if line.startswith('SECTION_'):
                 section = line
                 continue
 
-            # En fonction de la section courante, traiter
+            # Traitement selon la section
             if section == 'SECTION_HORIZON':
-                # La seule valeur, la longueur en jours
                 data['horizon'] = int(line)
             elif section == 'SECTION_SHIFTS':
-                # ID, Length in mins, shifts that cannot follow - séparés par virgules
                 parts = line.split(',')
                 shift_id = parts[0]
                 length = int(parts[1])
-                no_follow = parts[2:]  # liste des shifts (peut-être vide)
+                no_follow = parts[2:]  # liste de shifts qui ne peuvent pas suivre
                 data['shifts'][shift_id] = {'length': length, 'no_follow': no_follow}
             elif section == 'SECTION_STAFF':
-                # ID, MaxShifts/E=14|L=14, MaxTotalMinutes, MinTotalMinutes, MaxConsecutiveShifts, MinConsecutiveShifts, MinConsecutiveDaysOff, MaxWeekends
-                # Format d'une ligne exemple : A,E=14|L=14,4320,3360,5,2,2,1
-                parts = line.split(',')
+                # Ligne exemple : A,D=14,4320,3360,5,2,2,1
+                parts = line.split(',')  # ['A', 'D=14', '4320', '3360', '5', '2', '2', '1']
                 emp_id = parts[0]
-                # Extraire MaxShifts et MaxTotalMinutes
-                attr_part = parts[1]
-                max_shifts_str, max_total_str = attr_part.split('=')[1].split('|')
-                max_shifts = int(max_shifts_str)
-                max_total = int(max_total_str)
-                min_total = int(parts[2])
-                max_cseq = int(parts[3])
-                min_cseq = int(parts[4])
-                min_rest = int(parts[5])
-                max_wend = int(parts[6])
+
+                valeurs= parts[2:]
+                attr_part = parts[1]  # 'D=14'
+                # Séparer la partie après le '='
+                key_value = attr_part.split('=')
+                if len(key_value) != 2:
+                    print("Format inattendu dans ligne:", line)
+                    continue
+
+
+                if len(valeurs) != 6:
+                    print("Nombre de valeurs inattendu dans ligne:", line)
+                    print("il y a", len(valeurs), "éléments :", valeurs)
+                    continue
+
+                max_shifts = key_value[1]
+                max_total_minutes = int(valeurs[0])
+                min_total_minutes = int(valeurs[1])
+                max_cseq = int(valeurs[2])
+                min_cseq = int(valeurs[3])
+                min_rest = int(valeurs[4])
+                max_wend = int(valeurs[5])
+
                 data['staff'][emp_id] = {
                     'max_shifts': max_shifts,
-                    'max_total': max_total,
-                    'min_total': min_total,
+                    'max_total': max_total_minutes,
+                    'min_total': min_total_minutes,
                     'max_cseq': max_cseq,
                     'min_cseq': min_cseq,
                     'min_rest': min_rest,
                     'max_wend': max_wend
                 }
             elif section == 'SECTION_DAYS_OFF':
-                # EmployeeID, DayIndexes (ex : A,3)
                 parts = line.split(',')
                 emp_id = parts[0]
                 days_off_list = [int(d) for d in parts[1:]]
                 data['days_off'][emp_id] = days_off_list
             elif section == 'SECTION_SHIFT_ON_REQUESTS':
-                # ID, Day, ShiftID, Weight
                 parts = line.split(',')
                 emp_id = parts[0]
                 day = int(parts[1])
                 shift_id = parts[2]
                 weight = int(parts[3])
-                data['shift_on_requests'].append({
-                    'empID': emp_id,
-                    'day': day,
-                    'shiftID': shift_id,
-                    'weight': weight
-                })
+                data['shift_on_requests'].append({'empID': emp_id, 'day': day, 'shiftID': shift_id, 'weight': weight})
             elif section == 'SECTION_SHIFT_OFF_REQUESTS':
-                # idem
                 parts = line.split(',')
                 emp_id = parts[0]
                 day = int(parts[1])
                 shift_id = parts[2]
                 weight = int(parts[3])
-                data['shift_off_requests'].append({
-                    'empID': emp_id,
-                    'day': day,
-                    'shiftID': shift_id,
-                    'weight': weight
-                })
+                data['shift_off_requests'].append({'empID': emp_id, 'day': day, 'shiftID': shift_id, 'weight': weight})
             elif section == 'SECTION_COVER':
-                # Day, ShiftID, Requirement, Weight for under, weight for over
                 parts = line.split(',')
                 day = int(parts[0])
                 shiftID = parts[1]
                 requirement = int(parts[2])
                 weight_under = int(parts[3])
                 weight_over = int(parts[4])
-                data['cover'].append({
-                    'day': day,
-                    'shiftID': shiftID,
-                    'requirement': requirement,
-                    'weight_under': weight_under,
-                    'weight_over': weight_over
-                })
+                data['cover'].append({'day': day, 'shiftID': shiftID, 'requirement': requirement, 'weight_under': weight_under, 'weight_over': weight_over})
     return data
 
 # initialisation après chargement de data
-data = load_my_format('votre_fichier.txt')
-
+data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance2.txt')
+print(data)
 # Nombre total de jours dans l'horizon
 h = data['horizon']
 # Ensemble des jours (commençant à 1)
