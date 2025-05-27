@@ -1,13 +1,15 @@
+#Developped by Antoine Rouillard, Thomas Vauley, Adam Kaoukeb and Anthonin Pain
+
 from mip import Model, BINARY, xsum
 
-
+# Fonction qui va lire les informations dans le fichier txt passé en paramètre
 def load_my_format(filename):
     data = {
         'horizon': None,
-        'shifts': {},             # ID -> { 'length': int }
-        'staff': {},              # ID -> { 'max_shifts': int, 'max_total': int, 'min_total': int, 'max_cseq': int, 'min_cseq': int, 'min_rest': int, 'max_wend': int }
-        'days_off': {},           # EmployeeID -> list de jours
-        'shift_on_requests': [],  # list de dicts
+        'shifts': {},
+        'staff': {},
+        'days_off': {},
+        'shift_on_requests': [],
         'shift_off_requests': [],
         'cover': []
     }
@@ -16,11 +18,10 @@ def load_my_format(filename):
     with open(filename, 'r') as f:
         for line in f:
             line = line.strip()
-            # Ignorer les commentaires ou lignes vides
             if line.startswith('#') or not line:
                 continue
 
-            # Détecter la section
+            # On repère les différentes parties du fichier par section
             if line.startswith('SECTION_'):
                 section = line
                 continue
@@ -36,26 +37,14 @@ def load_my_format(filename):
                 no_follow = last.split('|') # liste de shifts qui ne peuvent pas suivre
                 data['shifts'][shift_id] = {'length': length, 'no_follow': no_follow}
             elif section == 'SECTION_STAFF':
-                # Ligne exemple : A,D=14,4320,3360,5,2,2,1
-                parts = line.split(',')  # ['A', 'D=14', '4320', '3360', '5', '2', '2', '1']
+
+                parts = line.split(',')
                 emp_id = parts[0]
 
                 valeurs= parts[2:]
                 attr_part = parts[1]  # 'D=14'
-                # Séparer la partie après le '='
+
                 max_shifts = attr_part.split('|')
-                '''
-                if len(key_value) != 2:
-                    print("Format inattendu dans ligne:", line)
-                    continue
-
-
-                if len(valeurs) != 6:
-                    print("Nombre de valeurs inattendu dans ligne:", line)
-                    print("il y a", len(valeurs), "éléments :", valeurs)
-                    continue
-                '''
-                #max_shifts = key_value[1]
                 max_total_minutes = int(valeurs[0])
                 min_total_minutes = int(valeurs[1])
                 max_cseq = int(valeurs[2])
@@ -112,10 +101,10 @@ J = list(range(1, h + 1))
 # Ensemble des week-ends (si h=14, W=1,2,...)
 W = list(range(1, (h // 7) + 1))
 
-# Ensemble des employés (liste des clés dans 'staff')
+# Ensemble des employés
 E = list(data['staff'].keys())
 
-# Ensemble des types de postes (d'après 'shifts' IDs)
+# Ensemble des types de postes
 P = list(data['shifts'].keys())
 
 # Dictionnaires pour les paramètres par poste
@@ -125,14 +114,7 @@ ujp = {}   # le besoin en personnel par jour pour chaque p
 
 for p in P:
     dp[p] = data['shifts'][p]['length']
-    # Si 'no_follow' est en place, le récupérer, sinon vide
     Ip[p] = data['shifts'][p].get('no_follow', [])
-    # Si vous voulez remplir ujp pour tous j dans J, faire :
-    for j in J:
-        # Ex: supposer que pour tous j c'est le même besoin, ou si dans data par exemple
-        # vous avez un dict, adaptez ici.
-        # exemple: ujp[(p,j)] = valeur définie selon votre fichier ou règle
-        pass
 
 # Dictionnaires pour les employés, initialisés à partir des données
 Re = {}     # jours de repos
@@ -180,24 +162,13 @@ for cover in data['cover']:
 
 for e in E:
     staff_info = data['staff'][e]
-    # Exemple d'extraire chaque paramètre
     tmax_e[e] = staff_info['max_total']
     tmin_e[e] = staff_info['min_total']
     cmax_e[e] = staff_info['max_cseq']
     cmin_e[e] = staff_info['min_cseq']
     rmin_e[e] = staff_info['min_rest']
     wmax_e[e] = staff_info['max_wend']
-    # Pour les jours de repos, si dans data['days_off'] e est présent
     Re[e] = data['days_off'].get(e, [])
-    # Pour mmax_ep, il faut que dans tes données tu aies cette info
-    # Si tu l'as dans `data['mmax_ep']`, l'utiliser directement.
-    # Sinon, si tu ne l'as pas, tu peux le fixer par exemple à une valeur par défaut
-    # (ex: 14)
-    # Exemple :
-    # mmax_ep[(e,p)] = valeur
-    # Si pas dans data, tu peux faire :
-    # mmax_ep[(e,p)] = valeur_par_defaut
-
 
 ### DEFINITION DES VARIABLES DE DECISION
 
@@ -209,13 +180,6 @@ for e in E:
         for p in P:
             x[(e, d, p)] = m.add_var(var_type=BINARY)
 
-# Variables d'affectation : employé e, jour j, poste p
-
-# Variables pour week-ends (si besoin)
-
-
-# Variables pour écarts de personnel
-
 
 
 
@@ -224,7 +188,7 @@ for e in E:
 for e in E:
     for d in J:
         m += xsum(x[(e, d, p)] for p in P) <= 1
-'''
+
 #Pour la contrainte 2
 for e in E:
     for d in J[:-1]:  # jusqu'à l’avant-dernier jour
@@ -269,22 +233,18 @@ for e in E:
         samedi = (w-1)*7 + 5
         dimanche = (w-1)*7 + 6
 
-        # Variable binaire qui indique si l'employé a travaillé un week-end w
         travaille_wend = m.add_var(var_type=BINARY, name=f"w_{e}_{w}")
 
-        # Si l’employé a travaillé dans ce week-end (samedi ou dimanche)
-        # alors il faut que `travaille_wend` = 1 : donc sum >= 1 => travaille_wend=1
         m += (xsum(x[(e, samedi, p)] for p in P) + xsum(x[(e, dimanche, p)] for p in P)) >= travaille_wend
 
-        # Limitation : le nombre de week-ends ne doit pas dépasser wmax_e[e]
         m += travaille_wend <= wmax_e[e]
-        '''
+
 #Pour la contrainte 9
-'''for e in E:
-    for d in data['days_off'].get(e, []):
-        for p in P:
-            m += x[(e, d, p)] == 0'''
-#Pour la contrainte 10
+    for e in E:
+        for d in data['days_off'].get(e, []):
+            for p in P:
+                m += x[(e, d, p)] == 0
+
 
 def contraint1(solver, x, E, J, P):
     """
@@ -440,9 +400,8 @@ def constraint8(solver, x, E, W, week_end_info, wmax_e):
     for e in E:
         count_wend = 0
         for w in W:
-            # Définir les jours du week-end w
-            samedi = w*7 + 5   # jour 5 dans la semaine (si 0 = lundi)
-            dimanche = w*7 + 6 # jour 6
+            samedi = w*7 + 5
+            dimanche = w*7 + 6
             travail_weekend = False
             if samedi < len(J):
                 travail_weekend = travail_weekend or (any(solver.Value(x[(e, samedi, p)]) == 1 for p in P))
@@ -490,31 +449,6 @@ if status == 'INTEGER_OPTIMAL' or status == 'FEASIBLE':
                     print(f"Employé {e} jour {d} poste {p} : {val}")
 else:
     print("Aucune solution trouvée.")
-#m.objective = xsum(x[(e, d, p)] * shift[p]['length'] for e in E for d in J for p in P)
-#status = m.optimize()
-'''
-if status == 'optimal':
-    # boucle pour récupérer et afficher
-    for e in E:
-        for d in J:
-            for p in P:
-                if x[(e, d, p)].x >= 0.5:
-                    print(f"{e} travaille le jour {d} sur {p}")
-def construire_planning(solver, x, E, J, P):
-    """
-    Construit un planning à partir de la solution, sous forme d'un dict
-    ou d'une liste par employé et jour, en respectant toutes les contraintes dures.
-    """
-    planning = {}
-    for e in E:
-        planning[e] = []
-        for d in J:
-            poste_trouve = '-'
-            for p in P:
-                if solver.Value(x[(e, d, p)]) == 1:
-                    poste_trouve = p
-                    break
-            planning[e].append(poste_trouve)
-    return planning
 
-'''
+
+
