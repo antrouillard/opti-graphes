@@ -1,7 +1,5 @@
-from ortools.sat.python import cp_model
+from mip import Model, BINARY, xsum
 
-
-model = cp_model.CpModel()
 
 def load_my_format(filename):
     data = {
@@ -169,149 +167,84 @@ for e in E:
 
 ### DEFINITION DES VARIABLES DE DECISION
 
-# Variables d'affectation : employé e, jour j, poste p
-x_ejp = {}
+m = Model()
+# Variables : e, d, p
+x = {}
 for e in E:
-    for j in J:
+    for d in J:
         for p in P:
-            x_ejp[(e, j, p)] = model.NewBoolVar(f"x_{e}_{j}_{p}")
+            x[(e, d, p)] = m.add_var(var_type=BINARY)
+
+# Variables d'affectation : employé e, jour j, poste p
 
 # Variables pour week-ends (si besoin)
-wmax = max(W)
-w_end = {}
-for e in E:
-    for w in W:
-        w_end[(e, w)] = model.NewBoolVar(f"w_{e}_{w}")
+
 
 # Variables pour écarts de personnel
-y_missing = {}
-y_excess = {}
-for p in P:
-    for j in J:
-        y_missing[(p, j)] = model.NewIntVar(0, 10000, f"miss_{p}_{j}")
-        y_excess[(p, j)] = model.NewIntVar(0, 10000, f"excess_{p}_{j}")
+
 
 #Pour la contrainte 1 OK
 for e in E:
     for d in J:
-        model.Add(sum(x_ejp[(e, d, p)] for p in P) <= 1)
+        m += xsum(x[(e, d, p)] for p in P) <= 1
 
 #Pour la contrainte 2
-'''for e in E:
-    for d in J[:-1]:
+for e in E:
+    for d in J[:-1]:  # jusqu'à l’avant-dernier jour
         for p in P:
-            # Vérifiez si Ip[p] existe et n'est pas vide
-            if p in Ip and Ip[p]:
-                model.AddImplication(
-                    x_ejp[(e, d, p)] == 1,
-                    sum(x_ejp[(e, d+1, p_prime)] for p_prime in Ip[p]) == 0
-                )'''
+            if Ip.get(p, [])!='':
+                for p2 in Ip.get(p, []):
+                    if p2!='':
+                        m += x[(e, d, p)] + x[(e, d+1, p2)] <= 1
 #Pour la contrainte 3 OK
-total = model.NewIntVar(0, len(J), f"total_{e}_{p}")
-
-limite_generale = 10 * len(J)  # ajuste cette valeur selon la taille de ton problème
-
 for e in E:
     for p in P:
-        limite_p = mmax_ep.get((e,p), limite_generale)  # limite max fixée ou valeur par défaut
-        # Si la limite est infinie, on la remplace par limite_generale
-        if limite_p == float('inf'):
-            limite_p = limite_generale
-        # ajouter la contrainte
-        model.Add(cp_model.LinearExpr.Sum([x_ejp[(e, d, p)] for d in J]) <= limite_p)
+        m += xsum(x[(e, d, p)] for d in J) <= mmax_ep.get((e,p), len(J))
 #Pour la contrainte 4 OK
 # Dictionnaire des durées
-shift_durations = {}
+shift = {}
 for p in P:
-    shift_durations[p] = data['shifts'][p]['length']
+    shift[p] = data['shifts'][p]
 for e in E:
-    for d in J:
-        total_duree = sum(x_ejp[(e, d, p)] * shift_durations[p] for p in P)
-        model.Add(total_duree >= tmin_e[e])
-        model.Add(total_duree <= tmax_e[e])
+    total_time = xsum(x[(e, d, p)] * shift[p]['length'] for d in J for p in P)
+    m += total_time >= tmin_e[e]
+    m += total_time <= tmax_e[e]
 #Pour la contrainte 5
-startSeq = {}
 for e in E:
-    for d in J:
-        startSeq[(e, d)] = model.NewBoolVar(f"startSeq_{e}_{d}")
-
-for e in E:
-    for d in J:
-        # Si d>0, appliquer la contrainte
-        if d > 0:
-            # La contrainte pour d>0
-            model.AddImplication(
-                startSeq[(e, d)],
-                1 - cp_model.LinearExpr.Sum([x_ejp[(e, d-1, p)] for p in P])
-            )
-        else:
-            # Pour d=0, tu peux fixer startSeq[(e, 0)] = 1 si tu veux que l’employé
-            # commence une séquence de travail à la première journée
-            model.Add(startSeq[(e, 0)] == 1)
+    for d in J[:-cmax_e[e]+1]:  # pour toutes les fenêtres
+        m += xsum(x[(e, day, p)] for day in range(d, d + cmax_e[e]) for p in P) <= cmax_e[e]
 #Pour la contrainte 6
 # La série de jours travaillés suivants doit faire au moins cmin_e[e]
-'''for e in E:
-    for d in J:
-        for d2 in J:
-            if d2 >= d and d2 < d + cmin_e[e]:
-                # Si startSeq[e,d] = 1, alors e doit travailler tous ces jours
-                model.AddImplication(
-                    startSeq[(e, d)],
-                    sum(x_ejp[(e, day, p)] for day in range(d, d + cmin_e[e]) for p in P if day in J) == cmin_e[e]
-                )'''
+for e in E:
+    for d in J[:-cmin_e[e]+1]:
+        m += xsum(x[(e, day, p)] for day in range(d, d + cmin_e[e]) for p in P) >= cmin_e[e]
 #Pour la contrainte 7
-'''rest_day = {}
 for e in E:
-    for d in J:
-        rest_day[(e, d)] = model.NewBoolVar(f"rest_{e}_{d}")
-for e in E:
-    for d in J:
-        # Si l'employé e ne travaille pas ce jour-là (toutes mes variables p)
-        model.Add(sum(x_ejp[(e, d, p)] for p in P) == 0).OnlyEnforceIf(rest_day[(e, d)])
-        # Si l'employé travaille ce jour-là
-        model.Add(sum(x_ejp[(e, d, p)] for p in P) >= 1).OnlyEnforceIf(1 - rest_day[(e, d)])'''
+    for d in J[:-rmin_e[e]+1]:
+        m += xsum(1 - sum(x[(e, day, p)] for p in P) for day in range(d, d + rmin_e[e])) >= rmin_e[e]
 #Pour la contrainte 8
 
-wmax_e = {...}  # dictionnaire avec limite de week-ends par employé
-W = range(1, (h // 7)+1)
+W = range(1, (len(J) // 7) + 1)
 
-# Dictionnaire pour variables week-end
-worked_weekend = {}
-for e in E:
-    for w in W:
-        worked_weekend[(e, w)] = model.NewBoolVar(f"worked_weekend_{e}_{w}")
-
-# Ajout des contraintes pour chaque week-end
 for e in E:
     for w in W:
         samedi = (w-1)*7 + 5
         dimanche = (w-1)*7 + 6
-        # Vérifier si l'employé travaille samedi ou dimanche
-        travail_samedi = model.NewBoolVar(f"work_sat_{e}_{w}")
-        travail_dimanche = model.NewBoolVar(f"work_sun_{e}_{w}")
-        # Si dans votre dict `J`, jour 0 = lundi, alors samedi= jour 5, dimanche= jour 6
-        if samedi in J:
-            model.AddMaxEquality(travail_samedi, [x_ejp[(e, samedi, p)] for p in P])
-        else:
-            model.Add(travail_samedi == 0)
-        if dimanche in J:
-            model.AddMaxEquality(travail_dimanche, [x_ejp[(e, dimanche, p)] for p in P])
-        else:
-            model.Add(travail_dimanche == 0)
-        # Si l’un ou l’autre est vrai, alors week-end travaillé
-        model.AddBoolOr([travail_samedi, travail_dimanche]).OnlyEnforceIf(worked_weekend[(e, w)])
-        model.AddImplication(worked_weekend[(e, w)], 1 - travail_samedi + 1 - travail_dimanche >= 1)
-        # Ou ça peut aussi être : [ travaillant samedi ou dimanche ] => week-end travaillé
-        model.Add(worked_weekend[(e, w)] == 1).OnlyEnforceIf([travail_samedi, travail_dimanche])
-        model.Add(worked_weekend[(e, w)] <= 1)
 
-    # Limite W
-    model.Add(sum(worked_weekend[(e, w)] for w in W) <= wmax_e[e])
+        # Variable binaire qui indique si l'employé a travaillé un week-end w
+        travaille_wend = m.add_var(var_type=BINARY, name=f"w_{e}_{w}")
+
+        # Si l’employé a travaillé dans ce week-end (samedi ou dimanche)
+        # alors il faut que `travaille_wend` = 1 : donc sum >= 1 => travaille_wend=1
+        m += (xsum(x[(e, samedi, p)] for p in P) + xsum(x[(e, dimanche, p)] for p in P)) >= travaille_wend
+
+        # Limitation : le nombre de week-ends ne doit pas dépasser wmax_e[e]
+        m += travaille_wend <= wmax_e[e]
 #Pour la contrainte 9
-for e in E:
+'''for e in E:
     for d in data['days_off'].get(e, []):
         for p in P:
-            model.Add(x_ejp[(e, d, p)] == 0)
+            m += x[(e, d, p)] == 0'''
 #Pour la contrainte 10
 
 def contraint1(solver, x, E, J, P):
@@ -498,13 +431,17 @@ def constraint9(solver, x, days_off, E, P):
                     return False
     return True
 
-solver = cp_model.CpSolver()
-status = solver.Solve(model)
-if status == cp_model.OPTIMAL or status == cp_model.FEASIBLE:
-    print("et ben niquel")
-else:
-    print("Aucune solution trouvée.")
 
+
+m.objective = xsum(x[(e, d, p)] * shift[p]['length'] for e in E for d in J for p in P)
+status = m.optimize()
+if status == 'optimal':
+    # boucle pour récupérer et afficher
+    for e in E:
+        for d in J:
+            for p in P:
+                if x[(e, d, p)].x >= 0.5:
+                    print(f"{e} travaille le jour {d} sur {p}")
 def construire_planning(solver, x, E, J, P):
     """
     Construit un planning à partir de la solution, sous forme d'un dict
@@ -522,5 +459,3 @@ def construire_planning(solver, x, E, J, P):
             planning[e].append(poste_trouve)
     return planning
 
-planning = construire_planning(solver, x_ejp, E, J, P)
-print(planning)
