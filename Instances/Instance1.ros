@@ -24,7 +24,7 @@
         <Contract ID="A">
             <MaxSeq label="Max 5 consecutive shifts" value="5" shift="$"/>
             <MinSeq label="Min 2 consecutive shifts" value="2" shift="$"/>
-            <MinSeq label="Min 2 consecutive days off" value="2" shift="-"/>
+            <MinSeq label="Min 2 consecutive days off" value="20" shift="-"/>
             <Workload><TimeUnits><Max><Count>4320</Count><Label>Max 4320 mins</Label></Max></TimeUnits>
                       <TimeUnits><Min><Count>3360</Count><Label>Min 3360 mins</Label></Min></TimeUnits></Workload>
             <Patterns><Match>
