@@ -104,7 +104,7 @@ def load_my_format(filename):
     return data
 
 # initialisation après chargement de data
-data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance2.txt')
+data = load_my_format('Instances/Instance2.txt')
 print(data)
 # Nombre total de jours dans l'horizon
 h = data['horizon']
