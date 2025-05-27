@@ -102,7 +102,7 @@ def load_my_format(filename):
     return data
 
 # initialisation après chargement de data
-data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance2.txt')
+data = load_my_format('/home/w136736/insa/opti-graphes/Instances/Instance1.txt')
 print(data)
 # Nombre total de jours dans l'horizon
 h = data['horizon']
@@ -144,6 +144,40 @@ rmin_e = {} # repos consécutifs minimaux
 wmax_e = {} # max week-ends travaillé
 mmax_ep = {} # max jours par poste p pour chaque employé e
 
+# Dictionnaire pour les pénalités
+qejp = {}  # Penalty if e n'est pas affecté à p alors qu'il voulait p
+pejp = {}  # Penalty si e est affecté à p alors qu'il ne voulait pas p
+vmin = {} # Pénalité si la couverture est inférieure à ujp
+vmax = {} # Pénalité si la couverture est supérieure à ujp
+
+# référez-vous aux "shift_off_requests"
+for req in data['shift_off_requests']:
+    e = req['empID']
+    d = req['day']
+    p = req['shiftID']
+    weight = req['weight']
+    pejp[(e, d, p)] = weight
+
+# pour les "shift_on_requests"
+for req in data['shift_on_requests']:
+    e = req['empID']
+    d = req['day']
+    p = req['shiftID']
+    weight = req['weight']
+    qejp[(e, d, p)] = weight
+
+for cover in data['cover']:
+    d = cover['day']
+    p = cover['shiftID']
+    # exemple : vous pouvez la remplir avec une valeur standard, ou la lire si dispo
+    # ici, vous pouvez fixer une pénalité standard ou la charger d’un fichier
+    vmin[(d, p)] = cover['weight_under']  # ou autre valeur
+    vmax[(d, p)] = cover['weight_over']
+
+    # La fonction objectif :
+
+
+
 for e in E:
     staff_info = data['staff'][e]
     # Exemple d'extraire chaque paramètre
@@ -183,11 +217,14 @@ for e in E:
 # Variables pour écarts de personnel
 
 
+
+
+
 #Pour la contrainte 1 OK
 for e in E:
     for d in J:
         m += xsum(x[(e, d, p)] for p in P) <= 1
-
+'''
 #Pour la contrainte 2
 for e in E:
     for d in J[:-1]:  # jusqu'à l’avant-dernier jour
@@ -213,6 +250,7 @@ for e in E:
 for e in E:
     for d in J[:-cmax_e[e]+1]:  # pour toutes les fenêtres
         m += xsum(x[(e, day, p)] for day in range(d, d + cmax_e[e]) for p in P) <= cmax_e[e]
+
 #Pour la contrainte 6
 # La série de jours travaillés suivants doit faire au moins cmin_e[e]
 for e in E:
@@ -240,6 +278,7 @@ for e in E:
 
         # Limitation : le nombre de week-ends ne doit pas dépasser wmax_e[e]
         m += travaille_wend <= wmax_e[e]
+        '''
 #Pour la contrainte 9
 '''for e in E:
     for d in data['days_off'].get(e, []):
@@ -433,8 +472,27 @@ def constraint9(solver, x, days_off, E, P):
 
 
 
-m.objective = xsum(x[(e, d, p)] * shift[p]['length'] for e in E for d in J for p in P)
-status = m.optimize()
+m.objective = -xsum(
+    pejp.get((e, d, p), 0) * (1 - x[(e, d, p)]) +
+    qejp.get((e, d, p), 0) * x[(e, d, p)] +
+    vmin.get((d, p), 0) * (ujp.get((d, p), 0) - xsum(x[(e2, d, p)] for e2 in E)) +
+    vmax.get((d, p), 0) * (xsum(x[(e2, d, p)] for e2 in E) - ujp.get((d, p), 0))
+    for e in E for d in J for p in P
+)
+status=m.optimize()
+if status == 'INTEGER_OPTIMAL' or status == 'FEASIBLE':
+    # La solution est trouvée, tu peux récupérer les valeurs
+    for e in E:
+        for d in J:
+            for p in P:
+                val = x[(e, d, p)].x
+                if val >= 0.5:
+                    print(f"Employé {e} jour {d} poste {p} : {val}")
+else:
+    print("Aucune solution trouvée.")
+#m.objective = xsum(x[(e, d, p)] * shift[p]['length'] for e in E for d in J for p in P)
+#status = m.optimize()
+'''
 if status == 'optimal':
     # boucle pour récupérer et afficher
     for e in E:
@@ -459,3 +517,4 @@ def construire_planning(solver, x, E, J, P):
             planning[e].append(poste_trouve)
     return planning
 
+'''
